@@ -8,7 +8,15 @@ export function buildDemoDeck(notes: string): Deck {
     .map((p) => p.replace(/\s+/g, ' ').trim())
     .filter((p) => p.length > 0)
 
-  const chunks = paragraphs.length >= 2 ? paragraphs : splitSentences(notes)
+  // A short first paragraph is almost always a heading — use it as the deck
+  // title instead of turning it into a near-empty card.
+  let deckTitle = 'Your notes, feed-ified'
+  if (paragraphs.length >= 2 && paragraphs[0].length <= 80) {
+    deckTitle = truncate(paragraphs[0].replace(/[.:]$/, ''), 48)
+    paragraphs.shift()
+  }
+
+  const chunks = paragraphs.length >= 2 ? paragraphs : splitSentences(paragraphs.join(' '))
 
   const emojis = ['📚', '💡', '🧠', '🔍', '⚡', '🎯', '🌱', '🚀']
   const cards: LessonCard[] = chunks.slice(0, 8).map((chunk, i) => {
@@ -28,7 +36,7 @@ export function buildDemoDeck(notes: string): Deck {
   })
 
   return {
-    title: 'Your notes, feed-ified',
+    title: deckTitle,
     emoji: '📖',
     cards,
     demo: true,
@@ -44,5 +52,9 @@ function splitSentences(text: string): string[] {
 }
 
 function truncate(s: string, max: number): string {
-  return s.length <= max ? s : s.slice(0, max - 1).trimEnd() + '…'
+  if (s.length <= max) return s
+  const cut = s.slice(0, max - 1)
+  const lastSpace = cut.lastIndexOf(' ')
+  // Cut at a word boundary when one is reasonably close to the limit.
+  return (lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut).trimEnd() + '…'
 }

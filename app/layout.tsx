@@ -1,9 +1,16 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'FlowFixer — Workflow analysis & fixes',
-  description: 'Paste your workflow or config and get a clear diagnosis and step-by-step fixes.',
+  title: 'ScrollLearn — your notes, but addictive',
+  description:
+    'Paste your notes or curriculum and AI turns them into a TikTok-style scrollable feed of narrated micro-lessons and quizzes.',
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
 }
 
 export default function RootLayout({

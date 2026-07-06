@@ -1,452 +1,161 @@
 'use client'
 
-import { useEffect, useState, ChangeEvent } from 'react'
+import { useEffect, useState } from 'react'
+import Feed from '@/components/Feed'
+import type { Deck } from '@/lib/types'
 
-const exampleWorkflow = `Trigger: Webhook (POST /lead)
+const EXAMPLE_NOTES = `Photosynthesis — Biology, Chapter 4
 
-Steps:
-1. Receive form submission from landing page
-2. Send lead data to OpenAI for qualification
-3. Store qualified lead in Airtable
-4. Send Slack notification to sales team
-5. Trigger follow-up email via Gmail API
+Photosynthesis is the process plants use to convert light energy into chemical energy stored in glucose. It takes place mainly in the leaves, inside organelles called chloroplasts, which contain the green pigment chlorophyll.
 
-Config:
-- OpenAI API key: not set
-- Airtable base ID: undefined
-- Gmail OAuth: expired token
-- Slack webhook: wrong channel ID`
+The overall equation: 6 CO2 + 6 H2O + light energy → C6H12O6 + 6 O2. Plants take in carbon dioxide through stomata and absorb water through their roots.
 
-const SEVERITY_CONFIG = {
-  Critical: {
-    dot: '#ef4444',
-    badge: 'bg-red-500/10 text-red-400 border border-red-500/20',
-  },
-  High: {
-    dot: '#f97316',
-    badge: 'bg-orange-500/10 text-orange-400 border border-orange-500/20',
-  },
-  Medium: {
-    dot: '#eab308',
-    badge: 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20',
-  },
-  Low: {
-    dot: '#22c55e',
-    badge: 'bg-green-500/10 text-green-400 border border-green-500/20',
-  },
-} as const
+There are two stages. The light-dependent reactions happen in the thylakoid membranes: light splits water molecules, releasing oxygen and producing ATP and NADPH. The light-independent reactions (Calvin cycle) happen in the stroma: ATP and NADPH are used to fix carbon dioxide into glucose.
 
-type DiagnosisItem = {
-  issue: string
-  severity: keyof typeof SEVERITY_CONFIG | string
-  explanation: string
-}
+Factors that affect the rate of photosynthesis include light intensity, carbon dioxide concentration, and temperature. Each acts as a limiting factor — the rate is capped by whichever is in shortest supply.
 
-type ApiResult = {
-  diagnosis?: DiagnosisItem[]
-  fixes?: string[]
-}
+Why it matters: photosynthesis produces nearly all the oxygen in Earth's atmosphere and is the entry point of energy into almost every food chain.`
+
+const LOADING_MESSAGES = [
+  'Reading your notes…',
+  'Finding the key ideas…',
+  'Writing hooks and captions…',
+  'Cooking up quiz questions…',
+  'Building your feed…',
+]
 
 export default function Home() {
-  const [workflow, setWorkflow] = useState('')
-  const [result, setResult] = useState<ApiResult | null>(null)
+  const [notes, setNotes] = useState('')
+  const [deck, setDeck] = useState<Deck | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [mounted, setMounted] = useState(false)
-  const [charCount, setCharCount] = useState(0)
+  const [loadingMsg, setLoadingMsg] = useState(0)
+
+  useEffect(() => setMounted(true), [])
 
   useEffect(() => {
-    setMounted(true)
-  }, [])
+    if (!loading) return
+    setLoadingMsg(0)
+    const t = setInterval(
+      () => setLoadingMsg((m) => Math.min(m + 1, LOADING_MESSAGES.length - 1)),
+      1600
+    )
+    return () => clearInterval(t)
+  }, [loading])
 
-  const handleAnalyze = async () => {
-    if (!workflow.trim()) return
+  const handleGenerate = async () => {
+    if (!notes.trim() || loading) return
     setLoading(true)
     setError('')
-    setResult(null)
-
     try {
-      const res = await fetch('/api/analyze', {
+      const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workflow }),
+        body: JSON.stringify({ notes }),
       })
-
-      if (!res.ok) throw new Error('Analysis failed')
-      const data: ApiResult = await res.json()
-      setResult(data)
-    } catch {
-      setError('Something went wrong. Check your API key and try again.')
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Generation failed')
+      setDeck(data as Deck)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong. Try again.')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleTextChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
-    setWorkflow(e.target.value)
-    setCharCount(e.target.value.length)
+  if (deck) {
+    return <Feed deck={deck} onExit={() => setDeck(null)} />
   }
 
-  const criticalCount =
-    result?.diagnosis?.filter((d) => d.severity === 'Critical').length ?? 0
-
   return (
-    <div
-      className="min-h-screen bg-[#0a0a0a] text-[#e8e8e8]"
-      style={{ fontFamily: "'DM Mono', 'Fira Code', monospace" }}
-    >
-      {/* Subtle grid background */}
+    <div className="relative min-h-screen overflow-hidden bg-[#0b0b14] text-white">
+      {/* Ambient glow */}
       <div
-        className="pointer-events-none fixed inset-0"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)',
-          backgroundSize: '48px 48px',
-        }}
+        className="pointer-events-none absolute -top-40 left-1/2 h-[500px] w-[700px] -translate-x-1/2 rounded-full opacity-25 blur-3xl"
+        style={{ background: 'radial-gradient(closest-side, #7c3aed, transparent)' }}
+      />
+      <div
+        className="pointer-events-none absolute -bottom-56 right-0 h-[400px] w-[500px] rounded-full opacity-20 blur-3xl"
+        style={{ background: 'radial-gradient(closest-side, #db2777, transparent)' }}
       />
 
-      {/* Top nav */}
-      <nav className="relative z-10 flex items-center justify-between border-b border-white/5 px-6 py-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path
-                d="M2 7h4m0 0V3m0 4v4m0-4h4"
-                stroke="#0a0a0a"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-            </svg>
-          </div>
-          <span className="text-sm font-semibold tracking-tight text-white">
-            FlowFixer
-          </span>
-          <span className="rounded-full border border-white/10 px-2 py-0.5 text-xs text-white/40">
+      <main
+        className="relative z-10 mx-auto flex min-h-screen max-w-2xl flex-col justify-center px-6 py-14"
+        style={{
+          opacity: mounted ? 1 : 0,
+          transform: mounted ? 'translateY(0)' : 'translateY(14px)',
+          transition: 'all 0.6s ease',
+        }}
+      >
+        <div className="mb-3 flex items-center gap-2">
+          <span className="text-2xl">🧠</span>
+          <span className="text-lg font-extrabold tracking-tight">ScrollLearn</span>
+          <span className="rounded-full border border-white/15 px-2 py-0.5 text-[10px] uppercase tracking-wider text-white/50">
             beta
           </span>
         </div>
-        <div className="flex items-center gap-6">
-          <span className="hidden text-xs text-white/60 sm:block">
-            Workflow debugger for AI builders
+
+        <h1 className="mb-3 text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl">
+          Your notes,
+          <br />
+          <span className="bg-gradient-to-r from-violet-400 via-fuchsia-400 to-pink-400 bg-clip-text text-transparent">
+            but addictive.
           </span>
-          <button className="text-xs text-white/60 transition-colors hover:text-white">
-            Docs
-          </button>
-        </div>
-      </nav>
+        </h1>
+        <p className="mb-8 max-w-md text-sm leading-relaxed text-white/60">
+          Paste your class notes or curriculum. AI turns them into a TikTok-style feed of
+          bite-size lessons with narration, animations, and quizzes. Learn by scrolling.
+        </p>
 
-      <main className="relative z-10 mx-auto max-w-5xl px-6 py-16">
-        {/* Hero */}
-        <div
-          className="mb-14"
-          style={{
-            opacity: mounted ? 1 : 0,
-            transform: mounted ? 'translateY(0)' : 'translateY(12px)',
-            transition: 'all 0.5s ease',
-          }}
-        >
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-400" />
-            <span className="text-xs text-white/65">AI-powered diagnostics</span>
+        <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur">
+          <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
+            <span className="text-xs text-white/50">📋 your notes</span>
+            <button
+              onClick={() => setNotes(EXAMPLE_NOTES)}
+              className="text-xs text-violet-300 transition hover:text-violet-200"
+            >
+              try example notes →
+            </button>
           </div>
-
-          <h1
-            className="mb-4 text-5xl font-bold leading-none tracking-tight text-white sm:text-6xl"
-            style={{ fontFamily: "'DM Mono', monospace", letterSpacing: '-0.03em' }}
-          >
-            Why doesn&apos;t
-            <br />
-            <span className="text-white/65">this work?</span>
-          </h1>
-          <p className="max-w-md text-sm leading-relaxed text-white/70">
-            Paste any workflow config — n8n, Zapier, LangChain, CrewAI. Get an
-            instant diagnosis with exact fixes. No guessing.
-          </p>
-        </div>
-
-        {/* Main panel */}
-        <div
-          className="grid grid-cols-1 gap-4 lg:grid-cols-2"
-          style={{
-            opacity: mounted ? 1 : 0,
-            transform: mounted ? 'translateY(0)' : 'translateY(16px)',
-            transition: 'all 0.6s ease 0.1s',
-          }}
-        >
-          {/* Input card */}
-          <div
-            className="flex flex-col overflow-hidden rounded-2xl border bg-white/[0.03]"
-            style={{ borderColor: 'rgba(255,255,255,0.07)' }}
-          >
-            <div
-              className="flex items-center justify-between border-b px-4 py-3"
-              style={{ borderColor: 'rgba(255,255,255,0.05)' }}
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder={`Paste anything you're studying:\n\n• lecture notes\n• a textbook chapter\n• flashcard dumps\n• that doc your teacher shared`}
+            className="min-h-[220px] w-full resize-none bg-transparent p-4 text-sm leading-relaxed text-white/85 outline-none placeholder:text-white/30"
+          />
+          <div className="flex items-center justify-between border-t border-white/5 px-4 py-3">
+            <span className="text-xs text-white/35">{notes.length.toLocaleString()} chars</span>
+            <button
+              onClick={handleGenerate}
+              disabled={loading || notes.trim().length < 20}
+              className="flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-6 py-2.5 text-sm font-bold text-white transition-all hover:brightness-110 disabled:opacity-30"
             >
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-white/10" />
-                <span className="text-xs text-white/60">workflow.config</span>
-              </div>
-              <button
-                onClick={() => {
-                  setWorkflow(exampleWorkflow)
-                  setCharCount(exampleWorkflow.length)
-                }}
-                className="text-xs text-white/45 transition-colors hover:text-white/65"
-              >
-                load example →
-              </button>
-            </div>
-
-            <textarea
-              value={workflow}
-              onChange={handleTextChange}
-              placeholder={`# Paste your workflow here
-
-Supports:
-- JSON / YAML configs
-- n8n flows
-- Zapier zaps
-- LangChain agents
-- Plain text descriptions`}
-              className="min-h-[300px] flex-1 resize-none bg-transparent p-4 text-xs leading-relaxed text-white/80 outline-none placeholder-[color:rgba(255,255,255,0.35)]"
-            />
-
-            <div
-              className="flex items-center justify-between border-t px-4 py-3"
-              style={{ borderColor: 'rgba(255,255,255,0.05)' }}
-            >
-              <span className="text-xs text-white/40">{charCount} chars</span>
-              <button
-                onClick={handleAnalyze}
-                disabled={loading || !workflow.trim()}
-                className="flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-xs font-semibold text-black transition-all hover:bg-white/90 disabled:opacity-30"
-              >
-                {loading ? (
-                  <>
-                    <span className="h-3 w-3 animate-spin rounded-full border border-black/30 border-t-black" />
-                    Analyzing...
-                  </>
-                ) : (
-                  <>
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                      <path
-                        d="M2 6h8M6 2l4 4-4 4"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                    Run Diagnostics
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Output card */}
-          <div
-            className="flex flex-col overflow-hidden rounded-2xl border bg-white/[0.03]"
-            style={{ borderColor: 'rgba(255,255,255,0.07)' }}
-          >
-            <div
-              className="flex items-center justify-between border-b px-4 py-3"
-              style={{ borderColor: 'rgba(255,255,255,0.05)' }}
-            >
-              <div className="flex items-center gap-2">
-                <div
-                  className={`h-2 w-2 rounded-full ${
-                    result ? (criticalCount > 0 ? 'bg-red-400' : 'bg-green-400') : 'bg-white/10'
-                  }`}
-                />
-                <span className="text-xs text-white/60">
-                  {result ? `${result.diagnosis?.length ?? 0} issues found` : 'diagnostics output'}
-                </span>
-              </div>
-              {result && (
-                <button
-                  onClick={() => {
-                    const text = result.fixes?.join('\n') ?? ''
-                    if (text) {
-                      void navigator.clipboard.writeText(text)
-                    }
-                  }}
-                  className="text-xs text-white/45 transition-colors hover:text-white/65"
-                >
-                  copy fixes →
-                </button>
+              {loading ? (
+                <>
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                  {LOADING_MESSAGES[loadingMsg]}
+                </>
+              ) : (
+                <>▶ Make my feed</>
               )}
-            </div>
-
-            <div className="min-h-[300px] flex-1 overflow-auto p-4">
-              {/* Empty state */}
-              {!result && !loading && !error && (
-                <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/8">
-                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                      <path
-                        d="M9 3v6l4 2"
-                        stroke="rgba(255,255,255,0.2)"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                      />
-                      <circle
-                        cx="9"
-                        cy="9"
-                        r="7"
-                        stroke="rgba(255,255,255,0.1)"
-                        strokeWidth="1.5"
-                      />
-                    </svg>
-                  </div>
-                  <p className="max-w-[180px] text-xs leading-relaxed text-white/40">
-                    Paste your workflow on the left and run diagnostics
-                  </p>
-                </div>
-              )}
-
-              {/* Loading */}
-              {loading && (
-                <div className="flex h-full flex-col items-center justify-center gap-4">
-                  <div className="flex gap-1">
-                    {[0, 1, 2].map((i) => (
-                      <div
-                        key={i}
-                        className="h-1.5 w-1.5 rounded-full bg-white/30"
-                        style={{
-                          animation: 'pulse 1.2s ease-in-out infinite',
-                          animationDelay: `${i * 0.2}s`,
-                        }}
-                      />
-                    ))}
-                  </div>
-                  <p className="text-xs text-white/40">Analyzing workflow...</p>
-                </div>
-              )}
-
-              {/* Error */}
-              {error && (
-                <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4">
-                  <p className="text-xs text-red-400">{error}</p>
-                </div>
-              )}
-
-              {/* Results */}
-              {result && !loading && (
-                <div className="space-y-5">
-                  {/* Issues */}
-                  {result.diagnosis && result.diagnosis.length > 0 && (
-                    <div>
-                      <p className="mb-3 text-xs uppercase tracking-widest text-white/45">
-                        Issues
-                      </p>
-                      <div className="space-y-2">
-                        {result.diagnosis.map((item, i) => {
-                          const config =
-                            SEVERITY_CONFIG[item.severity as keyof typeof SEVERITY_CONFIG] ??
-                            SEVERITY_CONFIG.Low
-                          return (
-                            <div
-                              key={i}
-                              className="rounded-xl border bg-white/[0.03] p-3"
-                              style={{ borderColor: 'rgba(255,255,255,0.06)' }}
-                            >
-                              <div className="mb-1.5 flex items-start justify-between gap-3">
-                                <div className="flex items-center gap-2">
-                                  <div
-                                    className="mt-0.5 h-1.5 w-1.5 flex-shrink-0 rounded-full"
-                                    style={{ backgroundColor: config.dot }}
-                                  />
-                                  <p className="text-xs font-medium text-white/80">
-                                    {item.issue}
-                                  </p>
-                                </div>
-                                <span
-                                  className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] ${config.badge}`}
-                                >
-                                  {item.severity}
-                                </span>
-                              </div>
-                              <p className="pl-3.5 text-xs leading-relaxed text-white/65">
-                                {item.explanation}
-                              </p>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Fixes */}
-                  {result.fixes && result.fixes.length > 0 && (
-                    <div>
-                      <p className="mb-3 text-xs uppercase tracking-widest text-white/45">
-                        Step-by-step fixes
-                      </p>
-                      <div className="space-y-2">
-                        {result.fixes.map((fix, i) => (
-                          <div key={i} className="flex items-start gap-3">
-                            <span className="mt-0.5 flex-shrink-0 rounded-md bg-white/5 px-1.5 py-0.5 text-[10px] text-white/40">
-                              {String(i + 1).padStart(2, '0')}
-                            </span>
-                            <p className="text-xs leading-relaxed text-white/80">{fix}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+            </button>
           </div>
         </div>
 
-        {/* Footer stat bar */}
-        <div
-          className="mt-8 flex items-center gap-6 text-xs text-white/40"
-          style={{
-            opacity: mounted ? 1 : 0,
-            transition: 'all 0.7s ease 0.2s',
-          }}
-        >
-          <span>n8n · Zapier · Make · LangChain · CrewAI · Custom</span>
-          <span className="ml-auto">Powered by GPT-4o</span>
+        {error && (
+          <div className="mt-4 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-xs text-red-300">
+            {error}
+          </div>
+        )}
+
+        <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-white/35">
+          <span>🎬 animated slides</span>
+          <span>🔊 spoken narration</span>
+          <span>⚡ quizzes as you scroll</span>
+          <span>📱 swipe like TikTok</span>
         </div>
       </main>
-
-      <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap');
-
-        * {
-          box-sizing: border-box;
-          margin: 0;
-          padding: 0;
-        }
-
-        ::-webkit-scrollbar {
-          width: 4px;
-        }
-        ::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        ::-webkit-scrollbar-thumb {
-          background: rgba(255, 255, 255, 0.1);
-          border-radius: 2px;
-        }
-
-        @keyframes pulse {
-          0%,
-          100% {
-            opacity: 0.2;
-            transform: scale(0.8);
-          }
-          50% {
-            opacity: 1;
-            transform: scale(1);
-          }
-        }
-      `}</style>
     </div>
   )
 }
-
